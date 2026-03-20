@@ -1,6 +1,7 @@
 import { Langfuse } from "langfuse";
 import http from "node:http";
 import https from "node:https";
+import crypto from "node:crypto";
 
 // Direct fetch using node:http/https — completely bypasses global-agent proxy patching
 const directHttpAgent = new http.Agent({ keepAlive: true });
@@ -97,7 +98,13 @@ class SingleTargetExporter {
 
     // Get the parent to nest under: agent span if exists, otherwise trace
     _getParent(traceId) {
-        return this.agentSpanMap.get(traceId) || this.traceMap.get(traceId);
+        const agentSpan = this.agentSpanMap.get(traceId);
+        if (agentSpan) {
+            this.api.logger.info(`[Langfuse:${this.label}] _getParent: using agent span (observationId=${agentSpan.observationId}) for traceId=${traceId}`);
+            return agentSpan;
+        }
+        this.api.logger.info(`[Langfuse:${this.label}] _getParent: NO agent span found, falling back to trace for traceId=${traceId}`);
+        return this.traceMap.get(traceId);
     }
 
     async startSpan(spanData, customSpanId) {
@@ -107,8 +114,9 @@ class SingleTargetExporter {
         const spanId = customSpanId || spanData.spanId;
         const startTime = new Date(spanData.startTime);
         if (spanData.type === "entry" || !spanData.parentSpanId) {
-            const event = trace.event({ name: spanData.name, startTime, metadata: spanData.attributes });
-            this.spanMap.set(spanId, { type: "event", obj: event, trace });
+            // Skip creating entry events — they create flat siblings that break the graph.
+            // Trace metadata is already on the trace object. Just record the spanId for endSpanById.
+            this.spanMap.set(spanId, { type: "event", obj: null, trace });
         } else if (spanData.type === "agent") {
             // Agent span: create under trace, save client for nesting children
             const span = trace.span({ name: spanData.name, startTime, metadata: spanData.attributes, input: spanData.input });
@@ -130,13 +138,23 @@ class SingleTargetExporter {
 
     endSpanById(spanId, endTime, additionalAttrs, output, _input) {
         const spanInfo = this.spanMap.get(spanId);
-        if (!spanInfo) return;
+        if (!spanInfo) {
+            this.api.logger.info(`[Langfuse:${this.label}] endSpanById: spanId=${spanId} NOT FOUND in spanMap (keys: ${[...this.spanMap.keys()].join(', ')})`);
+            return;
+        }
+        this.api.logger.info(`[Langfuse:${this.label}] endSpanById: spanId=${spanId} type=${spanInfo.type} langfuseId=${spanInfo.obj?.id}`);
         if (spanInfo.type === "generation" && spanInfo.obj) {
-            if (additionalAttrs) spanInfo.obj.update({ metadata: additionalAttrs, output: output || parseOutput(additionalAttrs) });
+            if (additionalAttrs) {
+                spanInfo.obj.update({ metadata: additionalAttrs, output: output || parseOutput(additionalAttrs) });
+            }
             spanInfo.obj.end();
+            this.api.logger.info(`[Langfuse:${this.label}] called generation.end() for id=${spanInfo.obj.id}`);
         } else if (spanInfo.type === "span" && spanInfo.obj) {
-            if (additionalAttrs) spanInfo.obj.update({ metadata: additionalAttrs, output });
+            if (additionalAttrs) {
+                spanInfo.obj.update({ metadata: additionalAttrs, output: output || undefined });
+            }
             spanInfo.obj.end();
+            this.api.logger.info(`[Langfuse:${this.label}] called span.end() for id=${spanInfo.obj.id}`);
         }
         // event type: fire-and-forget
         this.spanMap.delete(spanId);
@@ -168,12 +186,21 @@ class SingleTargetExporter {
             }
             generation.end();
         } else if (spanData.type === "tool") {
-            const span = parent.span({
-                name: spanData.name, startTime, metadata: spanData.attributes,
+            // Use "tool-create" event type directly for TOOL observation type
+            // TOOL type is required for Langfuse graph/DAG rendering
+            const toolId = crypto.randomUUID();
+            this.langfuse.enqueue("tool-create", {
+                id: toolId,
+                traceId: parent.traceId,
+                parentObservationId: parent.observationId || undefined,
+                name: spanData.name,
+                startTime,
+                endTime: new Date(),
+                metadata: spanData.attributes,
                 input: spanData.attributes?.["gen_ai.tool.call.arguments"],
                 output: spanData.attributes?.["gen_ai.tool.call.result"],
+                environment: "default",
             });
-            span.end();
         } else {
             trace.event({ name: spanData.name, startTime, metadata: spanData.attributes });
         }

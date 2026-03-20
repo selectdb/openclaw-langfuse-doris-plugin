@@ -659,9 +659,13 @@ export const langfusePlugin = {
                         if (rawChannelId !== originalChannelId && rawChannelId !== savedLastUserChannelId) {
                             contextByChannelId.delete(rawChannelId);
                         }
+                        // Wait for SDK batch queue to process end() events before flushing
+                        await new Promise(r => setTimeout(r, 500));
                         await exporter.flush();
+                        // Wait for flush to complete before clearing maps
+                        await new Promise(r => setTimeout(r, 500));
                         exporter.endTrace();
-                    }, 100);
+                    }, 200);
                 }
                 else {
                     if (savedLastUserChannelId)
