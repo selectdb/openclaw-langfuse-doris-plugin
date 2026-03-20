@@ -1,0 +1,32 @@
+{
+  "id": "openclaw-langfuse-plugin",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "publicKey": {
+        "type": "string",
+        "description": "Langfuse public key"
+      },
+      "secretKey": {
+        "type": "string",
+        "description": "Langfuse secret key"
+      },
+      "baseUrl": {
+        "type": "string",
+        "default": "https://cloud.langfuse.com",
+        "description": "Langfuse server URL"
+      },
+      "debug": {
+        "type": "boolean",
+        "default": false,
+        "description": "Enable debug logging"
+      },
+      "enabledHooks": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "List of hooks to enable"
+      }
+    },
+    "required": []
+  }
+}

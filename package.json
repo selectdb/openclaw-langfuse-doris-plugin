@@ -1,0 +1,30 @@
+{
+  "name": "openclaw-langfuse-plugin",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin for reporting AI agent execution traces to Langfuse",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "license": "MIT",
+  "dependencies": {
+    "langfuse": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
