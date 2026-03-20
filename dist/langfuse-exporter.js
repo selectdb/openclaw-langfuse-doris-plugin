@@ -96,6 +96,13 @@ class SingleTargetExporter {
         return trace;
     }
 
+    updateTrace(traceId, updates = {}) {
+        const trace = this.traceMap.get(traceId);
+        if (trace) {
+            trace.update(updates);
+        }
+    }
+
     // Get the parent to nest under: agent span if exists, otherwise trace
     _getParent(traceId) {
         const agentSpan = this.agentSpanMap.get(traceId);
@@ -267,6 +274,10 @@ export class LangfuseExporter {
 
     async startSpan(spanData, customSpanId) {
         await Promise.allSettled(this.targets.map(t => t.startSpan(spanData, customSpanId)));
+    }
+
+    updateTrace(traceId, updates) {
+        for (const t of this.targets) t.updateTrace(traceId, updates);
     }
 
     endSpanById(spanId, endTime, additionalAttrs, output, _input) {

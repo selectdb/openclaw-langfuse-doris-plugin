@@ -345,6 +345,11 @@ export const langfusePlugin = {
                         role: role || "user",
                         from: event.from,
                     });
+                    // Set userId on trace
+                    const msgUserId = event.from || event.metadata?.senderId;
+                    if (msgUserId) {
+                        exporter.updateTrace(ctx.traceId, { userId: String(msgUserId) });
+                    }
                 }
             });
         }
@@ -384,6 +389,12 @@ export const langfusePlugin = {
                 if (event.sessionId) {
                     ctx.sessionId = event.sessionId;
                 }
+                // Update trace with sessionId and userId when available
+                const userId = hookCtx.trigger || event.from || event.metadata?.senderId || undefined;
+                exporter.updateTrace(ctx.traceId, {
+                    ...(ctx.sessionId ? { sessionId: ctx.sessionId } : {}),
+                    ...(userId ? { userId: String(userId) } : {}),
+                });
                 if (!ctx.userInput && event.prompt) {
                     ctx.userInput = event.prompt;
                 }
