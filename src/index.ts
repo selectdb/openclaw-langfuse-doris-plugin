@@ -180,6 +180,8 @@ function activate(api: OpenClawPluginApi): void {
     debug: pluginConfig.debug || false,
     enabledHooks: pluginConfig.enabledHooks,
     targets: pluginConfig.targets,
+    tags: pluginConfig.tags,
+    environment: pluginConfig.environment,
   };
 
   const exporter = new LangfuseExporter(api, config);
@@ -466,11 +468,12 @@ function activate(api: OpenClawPluginApi): void {
           from: event.from,
         });
 
-        // Set userId on trace
+        // Set userId and input on trace
         const msgUserId = event.from || event.metadata?.senderId;
-        if (msgUserId) {
-          exporter.updateTrace(ctx.traceId, { userId: String(msgUserId) });
-        }
+        exporter.updateTrace(ctx.traceId, {
+          ...(msgUserId ? { userId: String(msgUserId) } : {}),
+          input: event.content,
+        });
       }
     });
   }
@@ -735,6 +738,8 @@ function activate(api: OpenClawPluginApi): void {
       ctx.agentStartTime = now;
       ctx.agentSpanId = generateId(16);
 
+      const agentInput = ctx.userInput || lastUserTraceContext?.userInput;
+
       const spanData = {
         name: `invoke_agent ${agentId}`,
         type: "agent",
@@ -750,6 +755,7 @@ function activate(api: OpenClawPluginApi): void {
           "openclaw.turn.id": ctx.turnId,
           "openclaw.version": openclawVersion,
         },
+        input: agentInput,
         traceId: ctx.traceId,
         spanId: ctx.agentSpanId,
         parentSpanId: ctx.rootSpanId,
@@ -790,13 +796,6 @@ function activate(api: OpenClawPluginApi): void {
           agentEndAttrs["gen_ai.session.id"] = ctx.sessionId || channelId;
         }
 
-        const agentInput = ctx.userInput || lastUserTraceContext?.userInput;
-        if (agentInput) {
-          agentEndAttrs["gen_ai.input.messages"] = truncateAttr(
-            JSON.stringify([{ role: "user", parts: [{ type: "text", content: String(agentInput) }] }])
-          );
-        }
-
         ctx.agentSpanId = undefined;
         ctx.agentStartTime = undefined;
       }
@@ -823,15 +822,28 @@ function activate(api: OpenClawPluginApi): void {
         setTimeout(async () => {
           const finalOutput = ctx.lastOutput || rootCtx.lastOutput;
 
-          // End agent span (deferred)
+          // Update trace input/output
+          const traceUpdates: Record<string, any> = {};
+          if (userInput) traceUpdates.input = userInput;
+          if (finalOutput) traceUpdates.output = finalOutput;
+          if (Object.keys(traceUpdates).length > 0) {
+            exporter.updateTrace(rootCtx.traceId, traceUpdates);
+          }
+
+          // End agent span
           if (pendingAgentSpanId && agentEndAttrs) {
+            if (userInput) {
+              agentEndAttrs["gen_ai.input.messages"] = truncateAttr(
+                JSON.stringify([{ role: "user", parts: [{ type: "text", content: String(userInput) }] }])
+              );
+            }
             if (finalOutput) {
               agentEndAttrs["gen_ai.output.messages"] = formatOutputMessages([
                 typeof finalOutput === "string" ? finalOutput : JSON.stringify(finalOutput),
               ]);
             }
 
-            exporter.endSpanById(pendingAgentSpanId, agentEndTime, agentEndAttrs, finalOutput, undefined);
+            exporter.endSpanById(pendingAgentSpanId, agentEndTime, agentEndAttrs, finalOutput, userInput);
 
             if (config.debug) {
               api.logger.info(
@@ -885,7 +897,6 @@ function activate(api: OpenClawPluginApi): void {
           // Wait for SDK batch queue to process end() events before flushing
           await new Promise(r => setTimeout(r, 500));
           await exporter.flush();
-          await new Promise(r => setTimeout(r, 500));
           exporter.endTrace();
         }, 200);
       } else {
@@ -948,6 +959,17 @@ const plugin = {
           },
           required: ["publicKey", "secretKey"],
         },
+      },
+      tags: {
+        type: "array",
+        items: { type: "string" },
+        default: ["openclaw"],
+        description: "Tags to attach to all Langfuse traces (e.g. instance name, team)",
+      },
+      environment: {
+        type: "string",
+        default: "default",
+        description: "Langfuse environment label (e.g. production, staging, development)",
       },
       debug: {
         type: "boolean",

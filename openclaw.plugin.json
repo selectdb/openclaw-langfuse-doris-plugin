@@ -30,6 +30,17 @@
           "required": ["publicKey", "secretKey"]
         }
       },
+      "tags": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": ["openclaw"],
+        "description": "Tags to attach to all Langfuse traces (e.g. instance name, team)"
+      },
+      "environment": {
+        "type": "string",
+        "default": "default",
+        "description": "Langfuse environment label (e.g. production, staging, development)"
+      },
       "debug": {
         "type": "boolean",
         "default": false,

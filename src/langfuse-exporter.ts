@@ -83,6 +83,8 @@ export interface LangfusePluginConfig {
   debug?: boolean;
   targets?: TargetConfig[];
   enabledHooks?: string[];
+  tags?: string[];
+  environment?: string;
 }
 
 export interface PluginApi {
@@ -159,12 +161,16 @@ class SingleTargetExporter {
   private spanMap = new Map<string, any>();
   private agentSpanMap = new Map<string, any>();
   private debug: boolean;
+  private tags: string[];
+  private environment: string;
 
-  constructor(api: PluginApi, target: TargetConfig, label: string) {
+  constructor(api: PluginApi, target: TargetConfig, label: string, tags: string[], environment: string) {
     this.api = api;
     this.label = label;
     this.langfuse = createLangfuseClient(target);
     this.debug = target.debug || false;
+    this.tags = tags;
+    this.environment = environment;
   }
 
   getOrCreateTrace(traceId: string, metadata: Record<string, any> = {}): any {
@@ -173,6 +179,8 @@ class SingleTargetExporter {
       trace = this.langfuse.trace({
         name: `openclaw-${traceId.slice(0, 8)}`,
         metadata: { ...metadata, source: "openclaw-plugin" },
+        tags: this.tags,
+        environment: this.environment,
       });
       this.traceMap.set(traceId, trace);
     }
@@ -245,11 +253,12 @@ class SingleTargetExporter {
       }
       spanInfo.obj.end();
     } else if (spanInfo.type === "span" && spanInfo.obj) {
-      if (additionalAttrs) {
-        spanInfo.obj.update({
-          metadata: additionalAttrs,
-          output: output || undefined,
-        });
+      const updatePayload: Record<string, any> = {};
+      if (additionalAttrs) updatePayload.metadata = additionalAttrs;
+      if (output) updatePayload.output = output;
+      if (_input) updatePayload.input = _input;
+      if (Object.keys(updatePayload).length > 0) {
+        spanInfo.obj.update(updatePayload);
       }
       spanInfo.obj.end();
     }
@@ -301,7 +310,7 @@ class SingleTargetExporter {
         metadata: spanData.attributes,
         input: spanData.attributes?.["gen_ai.tool.call.arguments"],
         output: spanData.attributes?.["gen_ai.tool.call.result"],
-        environment: "default",
+        environment: this.environment,
       });
     } else {
       // session/gateway/default events: fire-and-forget
@@ -350,10 +359,13 @@ export class LangfuseExporter {
       },
     ];
 
+    const tags = config.tags || ["openclaw"];
+    const environment = config.environment || "default";
+
     for (const t of targetConfigs) {
       if (!t.publicKey || !t.secretKey) continue;
       const label = t.name || t.baseUrl || "default";
-      this.targets.push(new SingleTargetExporter(api, t, label));
+      this.targets.push(new SingleTargetExporter(api, t, label, tags, environment));
       api.logger.info(`[Langfuse] Target added: ${label}`);
     }
 
