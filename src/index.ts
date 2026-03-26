@@ -201,7 +201,7 @@ function activate(api: OpenClawPluginApi): void {
   // Per-runId LLM timing — survives context linking failures
   const llmTimingByRunId = new Map<string, { startTime: number; spanId: string; systemInstructions?: string; inputMessages?: string }>();
 
-  const openclawVersion = (api as any).runtime?.version || "unknown";
+  const openclawVersion = (api.config as any)?.meta?.lastTouchedVersion || (api as any).runtime?.version || "unknown";
 
   const shouldHookEnabled = (hookName: string): boolean => {
     if (!config.enabledHooks) return true;
@@ -376,8 +376,7 @@ function activate(api: OpenClawPluginApi): void {
       const { ctx, channelId } = getOrCreateContext("system/gateway", undefined, "gateway_start");
 
       const span = createSpan(ctx, channelId, "gateway_start", "gateway", now, now, {
-        "gateway.version": event.version || "unknown",
-        "gateway.working_dir": event.workingDir || process.cwd(),
+        "gateway.port": event.port || 0,
       });
 
       delete (span.attributes as any)["openclaw.session.id"];
@@ -423,14 +422,13 @@ function activate(api: OpenClawPluginApi): void {
         now,
         now,
         {
-          "session.duration_ms": event.duration || 0,
+          "session.duration_ms": event.durationMs || 0,
           "session.message_count": event.messageCount || 0,
-          "session.total_tokens": event.totalTokens || 0,
         },
         undefined,
         {
           messageCount: event.messageCount,
-          totalTokens: event.totalTokens,
+          durationMs: event.durationMs,
         }
       );
 
@@ -796,10 +794,9 @@ function activate(api: OpenClawPluginApi): void {
       if (pendingAgentSpanId) {
         agentEndAttrs = {
           "agent.duration_ms": event.durationMs || 0,
-          "agent.message_count": event.messageCount || 0,
-          "agent.tool_call_count": event.toolCallCount || 0,
-          "gen_ai.usage.input_tokens": event.usage?.input || 0,
-          "gen_ai.usage.output_tokens": event.usage?.output || 0,
+          "agent.message_count": Array.isArray(event.messages) ? event.messages.length : 0,
+          "agent.success": event.success ?? true,
+          ...(event.error ? { "agent.error": event.error } : {}),
         };
 
         if (ctx.sessionId) {
