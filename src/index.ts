@@ -192,7 +192,6 @@ function activate(api: OpenClawPluginApi): void {
 
   let lastUserChannelId: string | undefined;
   let lastUserTraceContext: TraceContext | undefined;
-  let lastUserContextSetAt: number | undefined;
   let pendingToolCall: PendingToolCall | undefined;
 
   let lastLlmSystemInstructions: string | undefined;
@@ -266,10 +265,10 @@ function activate(api: OpenClawPluginApi): void {
     if (
       !activeCtx &&
       rawChannelId.startsWith("agent/") &&
-      lastUserTraceContext &&
-      lastUserContextSetAt &&
-      Date.now() - lastUserContextSetAt < 3000
+      lastUserTraceContext
     ) {
+      // Link agent events to the user's trace context.
+      // lastUserTraceContext is set by message_received and cleared by agent_end.
       activeCtx = lastUserTraceContext;
       channelId = lastUserChannelId || channelId;
       contextByChannelId.set(rawChannelId, activeCtx);
@@ -460,7 +459,6 @@ function activate(api: OpenClawPluginApi): void {
         if (!role) role = "user";
         lastUserChannelId = channelId;
         lastUserTraceContext = ctx;
-        lastUserContextSetAt = Date.now();
         ctx.userInput = event.content;
 
         await ensureEntrySpan(ctx, channelId, {
@@ -825,7 +823,6 @@ function activate(api: OpenClawPluginApi): void {
       // Clear global pointers immediately
       lastUserChannelId = undefined;
       lastUserTraceContext = undefined;
-      lastUserContextSetAt = undefined;
 
       const rootCtx = savedLastUserTraceContext || ctx;
 
