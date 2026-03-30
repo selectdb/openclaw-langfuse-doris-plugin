@@ -1,7 +1,6 @@
 import { Langfuse } from "langfuse";
 import http from "node:http";
 import https from "node:https";
-import crypto from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Direct fetch using node:http/https — completely bypasses global-agent proxy
@@ -212,6 +211,7 @@ class SingleTargetExporter {
     let trace = this.traceMap.get(traceId);
     if (!trace) {
       trace = this.langfuse.trace({
+        id: traceId,
         name: `openclaw-${traceId.slice(0, 8)}`,
         metadata: { ...metadata, source: "openclaw-plugin" },
         tags: this.tags,
@@ -248,6 +248,7 @@ class SingleTargetExporter {
       this.spanMap.set(spanId, { type: "event", obj: null, trace });
     } else if (spanData.type === "agent") {
       const span = trace.span({
+        id: spanId,
         name: spanData.name,
         startTime,
         metadata: spanData.attributes,
@@ -258,6 +259,7 @@ class SingleTargetExporter {
     } else if (spanData.type === "model") {
       const parent = this._getParent(spanData.traceId);
       const generation = parent.generation({
+        id: spanId,
         name: spanData.name,
         model: spanData.attributes?.["gen_ai.request.model"] || "unknown",
         startTime,
@@ -335,6 +337,7 @@ class SingleTargetExporter {
       } : undefined;
 
       const generation = parent.generation({
+        id: spanData.spanId,
         name: spanData.name,
         model: spanData.attributes?.["gen_ai.request.model"] || "unknown",
         startTime,
@@ -351,9 +354,8 @@ class SingleTargetExporter {
     } else if (spanData.type === "tool") {
       // Use "tool-create" event type directly for TOOL observation type
       // TOOL type is required for Langfuse graph/DAG rendering
-      const toolId = crypto.randomUUID();
       (this.langfuse as any).enqueue("tool-create", {
-        id: toolId,
+        id: spanData.spanId,
         traceId: parent.traceId,
         parentObservationId: parent.observationId || undefined,
         name: spanData.name,
@@ -366,7 +368,7 @@ class SingleTargetExporter {
       });
     } else {
       // session/gateway/default events: fire-and-forget
-      trace.event({ name: spanData.name, startTime, metadata: spanData.attributes });
+      trace.event({ id: spanData.spanId, name: spanData.name, startTime, metadata: spanData.attributes });
     }
   }
 

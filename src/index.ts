@@ -246,29 +246,13 @@ function activate(api: OpenClawPluginApi): void {
     hookName?: string
   ): { ctx: TraceContext; channelId: string; isNew: boolean } => {
     let channelId = rawChannelId;
-    let activeCtx = getContextByChannel(rawChannelId);
+    let activeCtx: TraceContext | undefined;
 
-    const effectiveRunId = runId || activeCtx?.runId || `run-${Date.now()}`;
+    const effectiveRunId = runId || getContextByChannel(rawChannelId)?.runId || `run-${Date.now()}`;
 
-    if (rawChannelId.startsWith("agent/") && effectiveRunId) {
-      const originalChannelId = getOriginalChannelId(effectiveRunId);
-      if (originalChannelId) {
-        channelId = originalChannelId;
-        activeCtx = getContextByChannel(originalChannelId) || activeCtx;
-      }
-    }
-
-    if (!activeCtx) {
-      activeCtx = getContextByRun(effectiveRunId);
-    }
-
-    if (
-      !activeCtx &&
-      rawChannelId.startsWith("agent/") &&
-      lastUserTraceContext
-    ) {
-      // Link agent events to the user's trace context.
-      // lastUserTraceContext is set by message_received and cleared by agent_end.
+    // For agent events, prefer lastUserTraceContext (most recent user message)
+    // over stale channelId lookups from previous conversations.
+    if (rawChannelId.startsWith("agent/") && lastUserTraceContext) {
       activeCtx = lastUserTraceContext;
       channelId = lastUserChannelId || channelId;
       contextByChannelId.set(rawChannelId, activeCtx);
@@ -279,6 +263,23 @@ function activate(api: OpenClawPluginApi): void {
           `[Langfuse] LINKING agent to user context: hook=${hookName}, agentChannel=${rawChannelId}, userChannel=${channelId}, traceId=${activeCtx.traceId}`
         );
       }
+    }
+
+    // Non-agent events or no lastUserTraceContext: use channelId/runId lookup
+    if (!activeCtx) {
+      activeCtx = getContextByChannel(rawChannelId);
+    }
+
+    if (rawChannelId.startsWith("agent/") && !activeCtx && effectiveRunId) {
+      const originalChannelId = getOriginalChannelId(effectiveRunId);
+      if (originalChannelId) {
+        channelId = originalChannelId;
+        activeCtx = getContextByChannel(originalChannelId) || activeCtx;
+      }
+    }
+
+    if (!activeCtx) {
+      activeCtx = getContextByRun(effectiveRunId);
     }
 
     let isNew = false;
