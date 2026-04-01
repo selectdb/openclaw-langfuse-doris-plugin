@@ -130,6 +130,22 @@ function toChatMessages(messages: any[]): { role: string; content: string }[] {
   }));
 }
 
+/** Keys already extracted into input/output — strip from metadata to avoid duplication. */
+const GENERATION_MESSAGE_KEYS = new Set([
+  "gen_ai.input.messages",
+  "gen_ai.output.messages",
+  "gen_ai.system_instructions",
+]);
+
+function stripMessageAttrs(attrs?: Record<string, any>): Record<string, any> | undefined {
+  if (!attrs) return undefined;
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(attrs)) {
+    if (!GENERATION_MESSAGE_KEYS.has(k)) result[k] = v;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function parseInput(attributes?: Record<string, any>): any {
   if (!attributes) return undefined;
   const result: { role: string; content: string }[] = [];
@@ -263,7 +279,7 @@ class SingleTargetExporter {
         name: spanData.name,
         model: spanData.attributes?.["gen_ai.request.model"] || "unknown",
         startTime,
-        metadata: spanData.attributes,
+        metadata: stripMessageAttrs(spanData.attributes),
         input: parseInput(spanData.attributes),
         output: parseOutput(spanData.attributes),
       });
@@ -284,7 +300,7 @@ class SingleTargetExporter {
     if (spanInfo.type === "generation" && spanInfo.obj) {
       if (additionalAttrs) {
         spanInfo.obj.update({
-          metadata: additionalAttrs,
+          metadata: stripMessageAttrs(additionalAttrs),
           output: output || parseOutput(additionalAttrs),
         });
       }
@@ -342,7 +358,7 @@ class SingleTargetExporter {
         model: spanData.attributes?.["gen_ai.request.model"] || "unknown",
         startTime,
         endTime,
-        metadata: spanData.attributes,
+        metadata: stripMessageAttrs(spanData.attributes),
         input: parseInput(spanData.attributes),
         output: parseOutput(spanData.attributes),
       });

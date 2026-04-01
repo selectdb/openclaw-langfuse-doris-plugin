@@ -282,6 +282,28 @@ function activate(api: OpenClawPluginApi): void {
       activeCtx = getContextByRun(effectiveRunId);
     }
 
+    // Fallback: link to last user trace for processing hooks.
+    // Handles platforms (e.g. TUI) where hookCtx resolves to a different
+    // channelId than the one used by message_received.
+    if (
+      !activeCtx &&
+      lastUserTraceContext &&
+      hookName &&
+      hookName !== "message_received" &&
+      hookName !== "gateway_start"
+    ) {
+      activeCtx = lastUserTraceContext;
+      channelId = lastUserChannelId || channelId;
+      contextByChannelId.set(rawChannelId, activeCtx);
+      contextByRunId.set(effectiveRunId, activeCtx);
+
+      if (config.debug) {
+        api.logger.info(
+          `[Langfuse] FALLBACK LINKING to user context: hook=${hookName}, rawChannel=${rawChannelId}, userChannel=${channelId}, traceId=${activeCtx.traceId}`
+        );
+      }
+    }
+
     let isNew = false;
     if (!activeCtx) {
       activeCtx = startTurn(effectiveRunId, channelId, rawChannelId !== channelId ? rawChannelId : undefined);
