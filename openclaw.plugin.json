@@ -41,6 +41,10 @@
         "default": "default",
         "description": "Langfuse environment label (e.g. production, staging, development)"
       },
+      "userId": {
+        "type": "string",
+        "description": "userId prefix on traces (e.g. 'alice' → 'alice/openclaw-tui')"
+      },
       "debug": {
         "type": "boolean",
         "default": false,

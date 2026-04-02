@@ -84,6 +84,7 @@ export interface LangfusePluginConfig {
   enabledHooks?: string[];
   tags?: string[];
   environment?: string;
+  userId?: string;
 }
 
 export interface PluginApi {

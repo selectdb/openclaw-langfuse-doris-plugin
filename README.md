@@ -98,6 +98,7 @@ openclaw gateway restart
 | `targets` | array | — | Multiple Langfuse targets (overrides single key config) |
 | `tags` | string[] | `["openclaw"]` | Tags attached to all Langfuse traces (e.g. instance name, team) |
 | `environment` | string | `"default"` | Langfuse environment label (e.g. production, staging, development) |
+| `userId` | string | — | userId prefix on traces (e.g. `"alice"` → `alice/openclaw-tui`) |
 | `debug` | boolean | `false` | Enable debug logging |
 | `enabledHooks` | string[] | all | List of hooks to enable |
 
