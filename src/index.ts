@@ -182,6 +182,7 @@ function activate(api: OpenClawPluginApi): void {
     targets: pluginConfig.targets,
     tags: pluginConfig.tags,
     environment: pluginConfig.environment,
+    userId: pluginConfig.userId,
   };
 
   const exporter = new LangfuseExporter(api, config);
@@ -491,7 +492,8 @@ function activate(api: OpenClawPluginApi): void {
         });
 
         // Set userId and input on trace
-        const msgUserId = event.from || event.metadata?.senderId;
+        const rawUserId = event.from || event.metadata?.senderId;
+        const msgUserId = config.userId && rawUserId ? `${config.userId}/${rawUserId}` : config.userId || rawUserId;
         exporter.updateTrace(ctx.traceId, {
           ...(msgUserId ? { userId: String(msgUserId) } : {}),
           input: event.content,
@@ -539,7 +541,8 @@ function activate(api: OpenClawPluginApi): void {
       }
 
       // Update trace with sessionId and userId when available
-      const userId = hookCtx.trigger || event.from || event.metadata?.senderId || undefined;
+      const rawLlmUserId = hookCtx.trigger || event.from || event.metadata?.senderId || undefined;
+      const userId = config.userId && rawLlmUserId ? `${config.userId}/${rawLlmUserId}` : config.userId || rawLlmUserId;
       exporter.updateTrace(ctx.traceId, {
         ...(ctx.sessionId ? { sessionId: ctx.sessionId } : {}),
         ...(userId ? { userId: String(userId) } : {}),
