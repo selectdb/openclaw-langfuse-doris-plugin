@@ -268,7 +268,7 @@ class SingleTargetExporter {
         id: spanId,
         name: spanData.name,
         startTime,
-        metadata: spanData.attributes,
+        metadata: stripMessageAttrs(spanData.attributes),
         input: spanData.input,
       });
       this.spanMap.set(spanId, { type: "span", obj: span, trace });
@@ -308,7 +308,7 @@ class SingleTargetExporter {
       spanInfo.obj.end({ endTime: endTime ? new Date(endTime) : undefined });
     } else if (spanInfo.type === "span" && spanInfo.obj) {
       const updatePayload: Record<string, any> = {};
-      if (additionalAttrs) updatePayload.metadata = additionalAttrs;
+      if (additionalAttrs) updatePayload.metadata = stripMessageAttrs(additionalAttrs);
       if (output) updatePayload.output = output;
       if (_input) updatePayload.input = _input;
       if (Object.keys(updatePayload).length > 0) {
