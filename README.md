@@ -8,7 +8,7 @@ OpenClaw plugin for reporting AI agent execution traces to [Langfuse](https://la
 
 ```bash
 # Clone to OpenClaw extensions directory
-git clone https://github.com/bingquanzhao/openclaw-langfuse-doris-plugin.git \
+git clone https://github.com/selectdb/openclaw-langfuse-doris-plugin.git \
   ~/.openclaw/extensions/openclaw-langfuse-plugin
 
 # Install dependencies
