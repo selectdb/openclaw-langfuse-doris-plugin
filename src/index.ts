@@ -415,7 +415,21 @@ function activate(api: OpenClawPluginApi): void {
   if (shouldHookEnabled("session_start")) {
     api.on("session_start", async (event: any, hookCtx: any) => {
       const rawChannelId = resolveChannelId(hookCtx, event.sessionId);
-      const { ctx, channelId } = getOrCreateContext(rawChannelId, undefined, "session_start");
+      const { ctx, channelId, isNew } = getOrCreateContext(rawChannelId, undefined, "session_start");
+
+      // Propagate sessionId to the context so later hooks (agent_end,
+      // llm_input fallbacks) can use it. Only persist it on the trace when
+      // we reused an existing context (typically the user's message_received
+      // trace, which already has userId). If we created a brand-new context,
+      // setting sessionId would produce a ghost trace — visible in the
+      // sessions list but without a user_id — which inflates session
+      // trace_count when users filter sessions by their userId.
+      if (event.sessionId) {
+        ctx.sessionId = event.sessionId;
+        if (!isNew) {
+          exporter.updateTrace(ctx.traceId, { sessionId: event.sessionId });
+        }
+      }
 
       const now = Date.now();
       const span = createSpan(ctx, channelId, "session_start", "session", now, now, {
@@ -436,7 +450,17 @@ function activate(api: OpenClawPluginApi): void {
   if (shouldHookEnabled("session_end")) {
     api.on("session_end", async (event: any, hookCtx: any) => {
       const rawChannelId = resolveChannelId(hookCtx, event.sessionId);
-      const { ctx, channelId } = getOrCreateContext(rawChannelId, undefined, "session_end");
+      const { ctx, channelId, isNew } = getOrCreateContext(rawChannelId, undefined, "session_end");
+
+      // Same rationale as session_start: only persist sessionId on the trace
+      // when we reused an existing context, to avoid creating ghost traces
+      // with session_id but no user_id.
+      if (event.sessionId) {
+        ctx.sessionId = event.sessionId;
+        if (!isNew) {
+          exporter.updateTrace(ctx.traceId, { sessionId: event.sessionId });
+        }
+      }
 
       const now = Date.now();
       const span = createSpan(
@@ -873,10 +897,14 @@ function activate(api: OpenClawPluginApi): void {
         setTimeout(async () => {
           const finalOutput = ctx.lastOutput || rootCtx.lastOutput;
 
-          // Update trace input/output
+          // Update trace input/output/sessionId
+          // NOTE: sessionId must be persisted on the trace itself so it appears
+          // in Doris traces.session_id, otherwise the trace is excluded from the
+          // sessions list (WHERE t.session_id IS NOT NULL).
           const traceUpdates: Record<string, any> = {};
           if (userInput) traceUpdates.input = userInput;
           if (finalOutput) traceUpdates.output = finalOutput;
+          if (resolvedSessionId) traceUpdates.sessionId = resolvedSessionId;
           if (Object.keys(traceUpdates).length > 0) {
             exporter.updateTrace(rootCtx.traceId, traceUpdates);
           }
